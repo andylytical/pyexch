@@ -1,0 +1,2 @@
+exchangelib==1.9.4
+tzlocal==1.4
