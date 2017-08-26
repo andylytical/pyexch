@@ -39,58 +39,52 @@ class PyExch( object ):
         'VACATION' : '(vacation|OOTO|OOO|out of the office|out of office)',
     }
 
-    def __init__( self, user=None, email=None, pwd=None, regex_map=None ):
-        ''' User should be in DOMAIN\\USERNAME format.
+    def __init__( self, user=None, ad_domain=None, email_domain=None, pwd=None, regex_map=None ):
+        ''' User 
+        should be in DOMAIN\\USERNAME format.
         '''
         self.user = user
-        self.email = email
+        self.ad_domain = ad_domain
+        self.email_domain = email_domain
         self.pwd = pwd
         self.regex_map = regex_map
         self._try_load_from_env()
+        self.full_user = '{}\\{}'.format( self.ad_domain, self.user )
+        self.full_email = '{}@{}'.format( self.user, self.email_domain )
         if not regex_map:
             self.regex_map = self.DEFAULT_REGEX_CLASSES
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
         self.tz = None
         self._set_timezone()
-        #pprint.pprint( 'self.user: {}'.format( self.user ) )
-        #pprint.pprint( 'self.email: {}'.format( self.email ) )
-        self.credentials = exchangelib.Credentials( username=self.user, 
+        self.credentials = exchangelib.Credentials( username=self.full_user, 
                                                     password=self.pwd )
-        self.account = exchangelib.Account( primary_smtp_address=self.email, 
+        self.account = exchangelib.Account( primary_smtp_address=self.full_email, 
                                             credentials=self.credentials,
                                             autodiscover=True, 
                                             access_type=exchangelib.DELEGATE )
         
 
     def _try_load_from_env( self ):
+        # USER
         if not self.user:
-            u = os.getenv( 'PYEXCH_USER' )
-            d = os.getenv( 'PYEXCH_AD_DOMAIN' )
-            if u:
-                self.user = u
-            elif d:
-                self.user = '{0}\\{1}'.format( d, getpass.getuser() )
-            else:
-                msg = [ 'Unable to determine user for MS Exchange account.',
-                        'Must do one of:\n',
-                        'pass directly to constructor,\n',
-                        'define environment variable PYEXCH_USER,\n',
-                        'or define environment variable PYEXCH_AD_DOMAIN',
-                        '(in which case use the current machine user)'
-                      ]
-                raise UserWarning( msg )
+            self.user = os.getenv( 'PYEXCH_USER' )
+        if not self.user:
+            self.user = getpass.getuser()
+        # AD_DOMAIN
+        if not self.ad_domain:
+            self.ad_domain = os.environ[ 'PYEXCH_AD_DOMAIN' ]
+        # EMAIL_DOMAIN
+        if not self.email_domain:
+            self.email_domain = os.environ[ 'PYEXCH_EMAIL_DOMAIN' ]
+        # PASSWORD
         if not self.pwd:
-            pfile = os.environ[ 'PYEXCH_PWD_FILE' ]
-            with open( pfile ) as f:
-                self.pwd = f.read().strip()
-        if not self.email:
-            m = os.getenv( 'PYEXCH_EMAIL' )
-            if m:
-                self.email = m
+            pfile = None
+            pfile = os.getenv( 'PYEXCH_PWD_FILE' )
+            if pfile:
+                with open( pfile ) as f:
+                    self.pwd = f.read().strip()
             else:
-                u = getpass.getuser()
-                dn = os.environ[ 'PYEXCH_EMAIL_DOMAIN' ]
-                self.email = '{0}@{1}'.format( u, dn )
+                self.pwd = getpass.getpass()
 
     def _set_timezone( self ):
         tz_str = tzlocal.get_localzone()
