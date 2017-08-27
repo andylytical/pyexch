@@ -4,6 +4,7 @@ import re
 import os
 import getpass
 import collections
+import json
 import logging
 
 # From ENV
@@ -34,14 +35,43 @@ class PyExch( object ):
         vacation, etc.) per day.
     '''
 
-    DEFAULT_REGEX_CLASSES = {
+    DEFAULT_REGEX_MAP = {
         'SICK'     : '(sick|doctor|dr. appt)',
         'VACATION' : '(vacation|OOTO|OOO|out of the office|out of office)',
     }
 
     def __init__( self, user=None, ad_domain=None, email_domain=None, pwd=None, regex_map=None ):
-        ''' User 
-        should be in DOMAIN\\USERNAME format.
+        ''' + user is just the raw username.
+              Resolution priority is: 
+              1. <user> parameter
+              2. PYEXCH_USER environment variable
+              3. current account username
+            + ad_domain is combined with user to make a valid exchange login in the
+              form <AD_DOMAIN>\\\\<USER>
+              Resolution priority: 
+              1. <ad_domain> parameter 
+              2. PYEXCH_AD_DOMAIN environment variable
+            + email_domain is combined with user to make a valid email address in
+              the form <USER>@<EMAIL_DOMAIN>
+              Resolution priority: 
+              1. <email_domain> parameter 
+              2. PYEXCH_EMAIL_DOMAIN environment variable
+            + pwd is the password for both exchange login and web login
+              Resolution priority: 
+              1. <pwd> parameter 
+              2. PYEXCH_PWD_FILE environment variable 
+                 (plain text file containing password)
+                 * low security * recommended only for testing *
+              3. Interactive user prompt
+            + regex_map is a map of KEY to REGEX used by get_events_filtered()
+              Filtering works as follows:
+              If subject (of exchange event) matches <REGEX>, then a new
+              simple_event is created with type=KEY.  
+              If subject does not match any <REGEX>, then exchange event is ignored.
+              Resolution priority: 
+              1. <regex_map> parameter
+              2. PYEXCH_REGEX_JSON environment variable
+              3. defaults to PyExch.DEFAULT_REGEX_MAP
         '''
         self.user = user
         self.ad_domain = ad_domain
@@ -51,8 +81,8 @@ class PyExch( object ):
         self._try_load_from_env()
         self.full_user = '{}\\{}'.format( self.ad_domain, self.user )
         self.full_email = '{}@{}'.format( self.user, self.email_domain )
-        if not regex_map:
-            self.regex_map = self.DEFAULT_REGEX_CLASSES
+        if not self.regex_map:
+            self.regex_map = self.DEFAULT_REGEX_MAP
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
         self.tz = None
         self._set_timezone()
@@ -85,6 +115,12 @@ class PyExch( object ):
                     self.pwd = f.read().strip()
             else:
                 self.pwd = getpass.getpass()
+        # REGEX
+        if not self.regex_map:
+            json_str = os.getenv( 'PYEXCH_REGEX_JSON' )
+            if json_str:
+                self.regex_map = json.loads( json_str )
+            
 
     def _set_timezone( self ):
         tz_str = tzlocal.get_localzone()
@@ -138,7 +174,7 @@ class PyExch( object ):
     def per_day_report( self, start ):
         ''' For each day, return a dict mapping 
             regex CLASS to seconds spent in that class
-            where "CLASS" is a key from regex_map (passed to init)
+            where "CLASS" is a KEY from regex_map (passed to init)
         '''
         raw_events = self.get_events_filtered( start )
         dates = {}
