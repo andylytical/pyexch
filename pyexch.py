@@ -1,5 +1,4 @@
 import datetime
-import pprint
 import re
 import os
 import getpass
@@ -10,6 +9,8 @@ import logging
 # From ENV
 import tzlocal
 import exchangelib
+
+LOGR = logging.getLogger(__name__)
 
 # TODO - Allow env var PYEXCH_REGEX as a filename to a YAML file
 # TODO - (better?) Allow env var PYEXCH_CONFIG as a filename to a YAML file
@@ -125,11 +126,11 @@ class PyExch( object ):
     def _set_timezone( self ):
         tz_str = tzlocal.get_localzone()
         self.tz = exchangelib.EWSTimeZone.from_pytz( tz_str )
-        pprint.pprint( [ 'LOCALTIMEZONE', self.tz ] )
+        LOGR.debug( [ 'LOCALTIMEZONE', self.tz ] )
 
 
     def get_events_filtered( self, start ):
-        logging.debug( 'Enter get_events_filtered' )
+        LOGR.debug( 'Enter get_events_filtered' )
         calendar_events = []
         cal_start = exchangelib.EWSDateTime.from_datetime( start )
         if not start.tzinfo:
@@ -180,7 +181,7 @@ class PyExch( object ):
         dates = {}
         for e in raw_events:
             daily_data = self.event_to_daily_data( e )
-            #pprint.pprint( daily_data )
+            LOGR.debug( daily_data )
             for thedate, data in daily_data.items():
                 if thedate not in dates:
                     dates[ thedate ] = {}
