@@ -41,29 +41,11 @@ class PyExch( object ):
         'VACATION' : '(vacation|OOTO|OOO|out of the office|out of office)',
     }
 
-    def __init__( self, user=None, ad_domain=None, email_domain=None, pwd=None, regex_map=None ):
-        ''' + user is just the raw username.
-              Resolution priority is: 
-              1. <user> parameter
-              2. PYEXCH_USER environment variable
-              3. current account username
-            + ad_domain is combined with user to make a valid exchange login in the
-              form <AD_DOMAIN>\\\\<USER>
-              Resolution priority: 
-              1. <ad_domain> parameter 
-              2. PYEXCH_AD_DOMAIN environment variable
-            + email_domain is combined with user to make a valid email address in
-              the form <USER>@<EMAIL_DOMAIN>
-              Resolution priority: 
-              1. <email_domain> parameter 
-              2. PYEXCH_EMAIL_DOMAIN environment variable
-            + pwd is the password for both exchange login and web login
-              Resolution priority: 
-              1. <pwd> parameter 
-              2. PYEXCH_PWD_FILE environment variable 
-                 (plain text file containing password)
-                 * low security * recommended only for testing *
-              3. Interactive user prompt
+    def __init__( self, login=None, pwd=None, account=None, regex_map=None ):
+        ''' + login is the exchange credential login name
+              NOTE: Might be in the form "user@domain" or "domain\\\\user"
+            + pwd is the exchange credential password
+            + account is the primary SMTP address of the exchange account associated with "login"
             + regex_map is a map of KEY to REGEX used by get_events_filtered()
               Filtering works as follows:
               If subject (of exchange event) matches <REGEX>, then a new
@@ -74,48 +56,39 @@ class PyExch( object ):
               2. PYEXCH_REGEX_JSON environment variable
               3. defaults to PyExch.DEFAULT_REGEX_MAP
         '''
-        self.user = user
-        self.ad_domain = ad_domain
-        self.email_domain = email_domain
+        self.login = login
         self.pwd = pwd
         self.regex_map = regex_map
         self._try_load_from_env()
-        self.full_user = '{}\\{}'.format( self.ad_domain, self.user )
-        self.full_email = '{}@{}'.format( self.user, self.email_domain )
         if not self.regex_map:
             self.regex_map = self.DEFAULT_REGEX_MAP
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
         self.tz = None
         self._set_timezone()
-        self.credentials = exchangelib.Credentials( username=self.full_user, 
+        self.credentials = exchangelib.Credentials( username=self.login, 
                                                     password=self.pwd )
-        self.account = exchangelib.Account( primary_smtp_address=self.full_email, 
+        self.account = exchangelib.Account( primary_smtp_address=account, 
                                             credentials=self.credentials,
                                             autodiscover=True, 
                                             access_type=exchangelib.DELEGATE )
         
 
     def _try_load_from_env( self ):
-        # USER
-        if not self.user:
-            self.user = os.getenv( 'PYEXCH_USER' )
-        if not self.user:
-            self.user = getpass.getuser()
-        # AD_DOMAIN
-        if not self.ad_domain:
-            self.ad_domain = os.environ[ 'PYEXCH_AD_DOMAIN' ]
-        # EMAIL_DOMAIN
-        if not self.email_domain:
-            self.email_domain = os.environ[ 'PYEXCH_EMAIL_DOMAIN' ]
+#        # USER
+#        if not self.user:
+#            self.user = os.getenv( 'PYEXCH_USER' )
+#        if not self.user:
+#            self.user = getpass.getuser()
+#        # AD_DOMAIN
+#        if not self.ad_domain:
+#            self.ad_domain = os.environ[ 'PYEXCH_AD_DOMAIN' ]
+#        # EMAIL_DOMAIN
+#        if not self.email_domain:
+#            self.email_domain = os.environ[ 'PYEXCH_EMAIL_DOMAIN' ]
         # PASSWORD
+        # allow prompt for passwd for debugging purposes only
         if not self.pwd:
-            pfile = None
-            pfile = os.getenv( 'PYEXCH_PWD_FILE' )
-            if pfile:
-                with open( pfile ) as f:
-                    self.pwd = f.read().strip()
-            else:
-                self.pwd = getpass.getpass()
+            self.pwd = getpass.getpass()
         # REGEX
         if not self.regex_map:
             json_str = os.getenv( 'PYEXCH_REGEX_JSON' )
