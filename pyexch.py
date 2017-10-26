@@ -5,15 +5,13 @@ import getpass
 import collections
 import json
 import logging
+import netrc
 
-# From ENV
+# From LOCAL
 import tzlocal
 import exchangelib
 
 LOGR = logging.getLogger(__name__)
-
-# TODO - Allow env var PYEXCH_REGEX as a filename to a YAML file
-# TODO - (better?) Allow env var PYEXCH_CONFIG as a filename to a YAML file
 
 ###
 # Work-around for missing TZ's in exchangelib
@@ -58,6 +56,7 @@ class PyExch( object ):
         '''
         self.login = login
         self.pwd = pwd
+        self.account = account
         self.regex_map = regex_map
         self._try_load_from_env()
         if not self.regex_map:
@@ -65,36 +64,45 @@ class PyExch( object ):
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
         self.tz = None
         self._set_timezone()
+        self._validate_auth()
         self.credentials = exchangelib.Credentials( username=self.login, 
                                                     password=self.pwd )
-        self.account = exchangelib.Account( primary_smtp_address=account, 
+        self.exch_account = exchangelib.Account( primary_smtp_address=self.account, 
                                             credentials=self.credentials,
                                             autodiscover=True, 
                                             access_type=exchangelib.DELEGATE )
         
 
     def _try_load_from_env( self ):
-#        # USER
-#        if not self.user:
-#            self.user = os.getenv( 'PYEXCH_USER' )
-#        if not self.user:
-#            self.user = getpass.getuser()
-#        # AD_DOMAIN
-#        if not self.ad_domain:
-#            self.ad_domain = os.environ[ 'PYEXCH_AD_DOMAIN' ]
-#        # EMAIL_DOMAIN
-#        if not self.email_domain:
-#            self.email_domain = os.environ[ 'PYEXCH_EMAIL_DOMAIN' ]
-        # PASSWORD
-        # allow prompt for passwd for debugging purposes only
-        if not self.pwd:
-            self.pwd = getpass.getpass()
+        # attempt to load from NETRC
+        netrc_file = os.getenv( 'NETRC' )
+        nrc = netrc.netrc( netrc_file )
+        nrc_parts = nrc.authenticators( 'EXCH' )
+        if nrc_parts:
+            if not self.login:
+                self.login = nrc_parts[0]
+            if not self.account:
+                self.account = nrc_parts[1]
+            if not self.pwd:
+                self.pwd = nrc_parts[2]
         # REGEX
         if not self.regex_map:
             json_str = os.getenv( 'PYEXCH_REGEX_JSON' )
             if json_str:
                 self.regex_map = json.loads( json_str )
             
+
+    def _validate_auth( self ):
+#        logging.debug( f"exch login: {self.login}" )
+#        logging.debug( f"exch account: {self.account}" )
+#        logging.debug( f"exch pwd: {self.pwd}" )
+        if not self.login:
+            raise UserWarning( 'Cannot proceed with empty exchange login' )
+        if not self.account:
+            raise UserWarning( 'Cannot proceed with empty exchange account' )
+        if not self.pwd:
+            raise UserWarning( 'Cannot proceed with empty exchange pwd' )
+
 
     def _set_timezone( self ):
         tz_str = tzlocal.get_localzone()
@@ -109,7 +117,7 @@ class PyExch( object ):
         if not start.tzinfo:
             cal_start = self.tz.localize( exchangelib.EWSDateTime.from_datetime( start ) )
         cal_end = self.tz.localize( exchangelib.EWSDateTime.now() )
-        items = self.account.calendar.view( start=cal_start, end=cal_end )
+        items = self.exch_account.calendar.view( start=cal_start, end=cal_end )
         for item in items:
             for typ,regx in self.re_map.items():
                 if regx.search( item.subject ):
