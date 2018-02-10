@@ -26,7 +26,9 @@ simple_event = collections.namedtuple( 'SimpleEvent', [ "start",
                                                         "end",
                                                         "elapsed",
                                                         "is_all_day",
-                                                        "type" ] )
+                                                        "type",
+                                                        "location",
+                                                        "subject" ] )
 
 
 class PyExch( object ):
@@ -129,8 +131,13 @@ class PyExch( object ):
         start = event.start.astimezone( self.tz )
         end = event.end.astimezone( self.tz )
         elapsed = end - start
-        is_all_day = event.is_all_day
-        return simple_event( start, end, elapsed, is_all_day, typ )
+        return simple_event( start=start, 
+                             end=end, 
+                             elapsed=elapsed, 
+                             is_all_day=event.is_all_day, 
+                             type=typ, 
+                             location=event.location, 
+                             subject=event.subject )
 
 
     def event_to_daily_data( self, e ):
