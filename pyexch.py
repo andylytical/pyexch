@@ -112,13 +112,18 @@ class PyExch( object ):
         LOGR.debug( [ 'LOCALTIMEZONE', self.tz ] )
 
 
-    def get_events_filtered( self, start ):
+    def get_events_filtered( self, start, end=None ):
         LOGR.debug( 'Enter get_events_filtered' )
         calendar_events = []
         cal_start = exchangelib.EWSDateTime.from_datetime( start )
         if not start.tzinfo:
             cal_start = self.tz.localize( exchangelib.EWSDateTime.from_datetime( start ) )
-        cal_end = self.tz.localize( exchangelib.EWSDateTime.now() )
+        cal_end = self.tz.localize( exchangelib.EWSDateTime.now() ) #default
+        if end:
+            #override default
+            cal_end = exchangelib.EWSDateTime.from_datetime( end )
+            if not end.tzinfo:
+                cal_end = self.tz.localize( exchangelib.EWSDateTime.from_datetime( end ) )
         items = self.exch_account.calendar.view( start=cal_start, end=cal_end )
         for item in items:
             for typ,regx in self.re_map.items():
