@@ -36,11 +36,6 @@ class PyExch( object ):
         vacation, etc.) per day.
     '''
 
-    DEFAULT_REGEX_MAP = {
-        'SICK'     : '(sick|doctor|dr. appt)',
-        'VACATION' : '(vacation|OOTO|OOO|out of the office|out of office)',
-    }
-
     def __init__( self, login=None, pwd=None, account=None, regex_map=None ):
         ''' + login is the exchange credential login name
               NOTE: Might be in the form "user@domain" or "domain\\\\user"
@@ -54,7 +49,6 @@ class PyExch( object ):
               Resolution priority: 
               1. <regex_map> parameter
               2. PYEXCH_REGEX_JSON environment variable
-              3. defaults to PyExch.DEFAULT_REGEX_MAP
         '''
         self.login = login
         self.pwd = pwd
@@ -62,7 +56,7 @@ class PyExch( object ):
         self.regex_map = regex_map
         self._try_load_from_env()
         if not self.regex_map:
-            self.regex_map = self.DEFAULT_REGEX_MAP
+            raise UserWarning( 'Cannot proceed with null regex_map' )
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
         self.tz = None
         self._set_timezone()
