@@ -63,10 +63,20 @@ class PyExch( object ):
         self._validate_auth()
         self.credentials = exchangelib.Credentials( username=self.login, 
                                                     password=self.pwd )
-        self.exch_account = exchangelib.Account( primary_smtp_address=self.account, 
-                                            credentials=self.credentials,
-                                            autodiscover=True, 
-                                            access_type=exchangelib.DELEGATE )
+#        self.exch_account = exchangelib.Account( primary_smtp_address=self.account, 
+#                                            credentials=self.credentials,
+#                                            autodiscover=True, 
+#                                            access_type=exchangelib.DELEGATE )
+        self.ews_custom = exchangelib.Configuration( 
+            server='outlook.office365.com',
+            credentials=self.credentials
+                                     )
+        self.exch_account = exchangelib.Account(
+            primary_smtp_address=self.account,
+            credentials=self.credentials,
+            autodiscover=False,
+            access_type=exchangelib.DELEGATE
+            )
         
 
     def _try_load_from_env( self ):
