@@ -10,6 +10,7 @@ import netrc
 # From LOCAL
 import tzlocal
 import exchangelib
+import exchangelib.errors
 
 LOGR = logging.getLogger(__name__)
 
@@ -63,21 +64,29 @@ class PyExch( object ):
         self._validate_auth()
         self.credentials = exchangelib.Credentials( username=self.login, 
                                                     password=self.pwd )
-#        self.exch_account = exchangelib.Account( primary_smtp_address=self.account, 
-#                                            credentials=self.credentials,
-#                                            autodiscover=True, 
-#                                            access_type=exchangelib.DELEGATE )
-        self.ews_custom = exchangelib.Configuration( 
+        acct_parms_campus = { 'primary_smtp_address': self.account, 
+                              'access_type': exchangelib.DELEGATE,
+                              'credentials': self.credentials,
+                              'autodiscover': True,
+                            }
+        # manually specify server for EWS cloud hosted calendar
+        ews_config = exchangelib.Configuration( 
             server='outlook.office365.com',
             credentials=self.credentials
-                                     )
-        self.exch_account = exchangelib.Account(
-            primary_smtp_address=self.account,
-            credentials=self.credentials,
-            autodiscover=False,
-            access_type=exchangelib.DELEGATE
-            )
-        
+        )
+        acct_parms_ews = { 'primary_smtp_address': self.account, 
+                           'access_type': exchangelib.DELEGATE,
+                           'config': ews_config,
+                           'autodiscover': False,
+                         }
+
+        try:
+            # autodiscovery works for campus hosted calendar
+            self.exch_account = exchangelib.Account( **acct_parms_campus )
+        except ( exchangelib.errors.AutoDiscoverFailed ) as e:
+            # manually specify server for EWS cloud hosted calendar
+            self.exch_account = exchangelib.Account( **acct_parms_ews )
+
 
     def _try_load_from_env( self ):
         # attempt to load from NETRC

@@ -6,4 +6,4 @@ export PYEXCH_REGEX_JSON='{
 "VACA" : "(vacation|OOTO|OOO|out of the office|out of office|PTO|Paid)" 
 }'
 
-./env/bin/python atest.py
+python atest.py
