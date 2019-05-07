@@ -1,11 +1,12 @@
-import datetime
-import re
-import os
-import getpass
 import collections
+import datetime
+import getpass
 import json
 import logging
 import netrc
+import os
+import pprint
+import re
 
 # From LOCAL
 import tzlocal
@@ -18,8 +19,8 @@ LOGR = logging.getLogger(__name__)
 # Work-around for missing TZ's in exchangelib
 #
 # Hopefully will get fixed in https://github.com/ncsa/exchangelib/pull/1
-missing_timezones = { 'America/Chicago': 'Central Standard Time' }
-exchangelib.EWSTimeZone.PYTZ_TO_MS_MAP.update( missing_timezones )
+#missing_timezones = { 'America/Chicago': 'Central Standard Time' }
+#exchangelib.EWSTimeZone.PYTZ_TO_MS_MAP.update( missing_timezones )
 #
 ###
 
@@ -55,6 +56,7 @@ class PyExch( object ):
         self.pwd = pwd
         self.account = account
         self.regex_map = regex_map
+        self.exch_account = None
         self._try_load_from_env()
         if not self.regex_map:
             raise UserWarning( 'Cannot proceed with null regex_map' )
@@ -64,12 +66,23 @@ class PyExch( object ):
         self._validate_auth()
         self.credentials = exchangelib.Credentials( username=self.login, 
                                                     password=self.pwd )
-        acct_parms_campus = { 'primary_smtp_address': self.account, 
-                              'access_type': exchangelib.DELEGATE,
-                              'credentials': self.credentials,
-                              'autodiscover': True,
-                            }
-        # manually specify server for EWS cloud hosted calendar
+########
+#        # Auto-discovery works with local campus server,
+#        #  but local server is long gone, so no longer using this method.
+#        #  Leaving this here as an example of auto-discovery.
+#        acct_parms_campus = { 'primary_smtp_address': self.account, 
+#                              'access_type': exchangelib.DELEGATE,
+#                              'credentials': self.credentials,
+#                              'autodiscover': True,
+#                            }
+#        try:
+#            # autodiscovery works for campus hosted calendar
+#            self.exch_account = exchangelib.Account( **acct_parms_campus )
+#        except ( exchangelib.errors.AutoDiscoverFailed ) as e:
+#            pass
+########
+
+        # manually specify server for Outlook 365 (cloud hosted)
         ews_config = exchangelib.Configuration( 
             server='outlook.office365.com',
             credentials=self.credentials
@@ -79,13 +92,9 @@ class PyExch( object ):
                            'config': ews_config,
                            'autodiscover': False,
                          }
-
-        try:
-            # autodiscovery works for campus hosted calendar
-            self.exch_account = exchangelib.Account( **acct_parms_campus )
-        except ( exchangelib.errors.AutoDiscoverFailed ) as e:
-            # manually specify server for EWS cloud hosted calendar
-            self.exch_account = exchangelib.Account( **acct_parms_ews )
+        self.exch_account = exchangelib.Account( **acct_parms_ews )
+        if not self.exch_account:
+            raise UserWarning( 'Error while logging into Exchange Cloud Service' )
 
 
     def _try_load_from_env( self ):
@@ -131,12 +140,14 @@ class PyExch( object ):
         cal_start = exchangelib.EWSDateTime.from_datetime( start )
         if not start.tzinfo:
             cal_start = self.tz.localize( exchangelib.EWSDateTime.from_datetime( start ) )
+        LOGR.debug( pprint.pformat( f'Cal_Start: {cal_start}' ) )
         cal_end = self.tz.localize( exchangelib.EWSDateTime.now() ) #default
         if end:
             #override default
             cal_end = exchangelib.EWSDateTime.from_datetime( end )
             if not end.tzinfo:
                 cal_end = self.tz.localize( exchangelib.EWSDateTime.from_datetime( end ) )
+        LOGR.debug( pprint.pformat( f'Cal_End: {cal_end}' ) )
         items = self.exch_account.calendar.view( start=cal_start, end=cal_end )
         for item in items:
             for typ,regx in self.re_map.items():
