@@ -4,7 +4,7 @@ import pprint
 
 pyex = pyexch.PyExch()
 
-start = datetime.datetime( 2018, 1, 1 )
+start = datetime.datetime( 2021, 8, 5 )
 #events = pyex.get_events_filtered( start )
 #pprint.pprint( events )
 report = pyex.per_day_report( start )

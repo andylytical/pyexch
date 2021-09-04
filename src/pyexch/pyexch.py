@@ -9,20 +9,10 @@ import pprint
 import re
 
 # From LOCAL
-import tzlocal
 import exchangelib
 import exchangelib.errors
 
 LOGR = logging.getLogger(__name__)
-
-###
-# Work-around for missing TZ's in exchangelib
-#
-# Hopefully will get fixed in https://github.com/ncsa/exchangelib/pull/1
-#missing_timezones = { 'America/Chicago': 'Central Standard Time' }
-#exchangelib.EWSTimeZone.PYTZ_TO_MS_MAP.update( missing_timezones )
-#
-###
 
 simple_event = collections.namedtuple( 'SimpleEvent', [ "start",
                                                         "end",
@@ -61,8 +51,7 @@ class PyExch( object ):
         if not self.regex_map:
             raise UserWarning( 'Cannot proceed with null regex_map' )
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
-        self.tz = None
-        self._set_timezone()
+        self.tz = exchangelib.EWSTimeZone.localzone()
         self._validate_auth()
         self.credentials = exchangelib.Credentials( username=self.login, 
                                                     password=self.pwd )
@@ -128,12 +117,6 @@ class PyExch( object ):
             raise UserWarning( 'Cannot proceed with empty exchange pwd' )
 
 
-    def _set_timezone( self ):
-        tz_str = tzlocal.get_localzone()
-        self.tz = exchangelib.EWSTimeZone.from_pytz( tz_str )
-        LOGR.debug( [ 'LOCALTIMEZONE', self.tz ] )
-
-
     def get_events_filtered( self, start, end=None ):
         LOGR.debug( 'Enter get_events_filtered' )
         calendar_events = []
@@ -157,8 +140,15 @@ class PyExch( object ):
 
 
     def as_simple_event( self, event, typ ):
-        start = event.start.astimezone( self.tz )
-        end = event.end.astimezone( self.tz )
+        try:
+            start = event.start.astimezone( self.tz )
+            end = event.end.astimezone( self.tz )
+        except AttributeError as e:
+            # convert EWSDate to EWSDateTime (common for all-day events)
+            sy, sm, sd = [ getattr( event.start, a ) for a in ( 'year', 'month', 'day' ) ]
+            ey, em, ed = [ getattr( event.end, a ) for a in ( 'year', 'month', 'day' ) ]
+            start = exchangelib.EWSDateTime( sy, sm, sd, tzinfo=self.tz )
+            end = exchangelib.EWSDateTime( ey, em, ed, 23, 59, 59, tzinfo=self.tz )
         elapsed = end - start
         return simple_event( start=start, 
                              end=end, 
@@ -189,12 +179,12 @@ class PyExch( object ):
         return daily_data
 
 
-    def per_day_report( self, start ):
+    def per_day_report( self, start, end=None ):
         ''' For each day, return a dict mapping 
             regex CLASS to seconds spent in that class
             where "CLASS" is a KEY from regex_map (passed to init)
         '''
-        raw_events = self.get_events_filtered( start )
+        raw_events = self.get_events_filtered( start, end )
         dates = {}
         for e in raw_events:
             daily_data = self.event_to_daily_data( e )
