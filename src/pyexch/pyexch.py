@@ -122,14 +122,14 @@ class PyExch( object ):
         calendar_events = []
         cal_start = exchangelib.EWSDateTime.from_datetime( start )
         if not start.tzinfo:
-            cal_start = self.tz.localize( exchangelib.EWSDateTime.from_datetime( start ) )
+            cal_start = exchangelib.EWSDateTime.from_datetime( start ).astimezone( self.tz )
         LOGR.debug( pprint.pformat( f'Cal_Start: {cal_start}' ) )
-        cal_end = self.tz.localize( exchangelib.EWSDateTime.now() ) #default
+        cal_end = exchangelib.EWSDateTime.now().astimezone( self.tz ) #default
         if end:
             #override default
             cal_end = exchangelib.EWSDateTime.from_datetime( end )
             if not end.tzinfo:
-                cal_end = self.tz.localize( exchangelib.EWSDateTime.from_datetime( end ) )
+                cal_end = exchangelib.EWSDateTime.from_datetime( end ).astimezone( self.tz )
         LOGR.debug( pprint.pformat( f'Cal_End: {cal_end}' ) )
         items = self.exch_account.calendar.view( start=cal_start, end=cal_end )
         for item in items:
