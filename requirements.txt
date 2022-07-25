@@ -1,2 +1,4 @@
 exchangelib
 tzlocal
+oauthlib
+PyYAML
