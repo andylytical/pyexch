@@ -12,6 +12,7 @@ import pathlib
 import pprint
 import re
 import requests_oauthlib
+import sys
 import yaml
 
 LOGR = logging.getLogger(__name__)
@@ -37,34 +38,40 @@ class PyExch( object ):
     token_file_default = f"{os.environ['HOME']}/.ssh/exchange_token"
 
 
-    def __init__( self, login=None, account=None, regex_map=None ):
-        ''' + login is the exchange credential login name
-              NOTE: Might be in the form "user@domain" or "domain\\\\user"
-            + account is the primary SMTP address of the exchange account to be accessed
-            + regex_map is a map of KEY to REGEX used by get_events_filtered()
+    def __init__( self, oauth_conf={}, account=None, regex_map=None ):
+        ''' + oauth_conf (Dict) with keys:
+              - tenant_id (String)
+              - client_id (String)
+              - client_secret (String)
+              - scope (Array of Strings)
+            + account (String) "primary SMTP address" of the exchange account to be accessed
+            + regex_map (Dict) of KEY -> REGEX mappings used by get_events_filtered()
               Filtering works as follows:
               If subject (of exchange event) matches <REGEX>, then a new
               simple_event is created with type=KEY.
               If subject does not match any <REGEX>, then exchange event is ignored.
-              Resolution priority:
-              1. <regex_map> parameter
-              2. PYEXCH_REGEX_JSON environment variable
+            ---------------------
+            ENVIRONMENT VARIABLES
+            ---------------------
+            OAUTH_CONFIG_FILE: path to a YAML formatted file containing oauth_conf
+            OAUTH_TOKEN_FILE: path to where OAUTH tokens are/will be stored
+            NETRC: path to .netrc formatted file with machine name EXCH
+            PYEXCH_REGEX_JSON: json formatted string with regex_map
         '''
-        self.login = login
         self.account = account
         self.regex_map = regex_map
-        self.exch_account = None
-        self.oauth_data = None
+        self.oauth_conf = oauth_conf
         self.token_file = None
         self._try_load_from_env()
+        self.exch_account = None
         if not self.regex_map:
             raise UserWarning( 'Cannot proceed with null regex_map' )
         self.re_map = { k: re.compile( v, re.IGNORECASE ) for k,v in self.regex_map.items() }
         self.tz = exchangelib.EWSTimeZone.localzone()
         self.credentials = exchangelib.OAuth2AuthorizationCodeCredentials(
-            client_id=self.oauth_data['client_id'],
-            client_secret=self.oauth_data['client_secret'],
-            tenant_id=self.oauth_data['tenant_id'],
+            client_id=self.oauth_conf['client_id'],
+            client_secret=self.oauth_conf['client_secret'],
+            tenant_id=self.oauth_conf['tenant_id'],
             access_token=self._get_token(),
         )
         ews_config = exchangelib.Configuration(
@@ -89,8 +96,6 @@ class PyExch( object ):
         nrc = netrc.netrc( netrc_file )
         nrc_parts = nrc.authenticators( 'EXCH' )
         if nrc_parts:
-            if not self.login:
-                self.login = nrc_parts[0]
             if not self.account:
                 self.account = nrc_parts[1]
         # REGEX
@@ -99,13 +104,13 @@ class PyExch( object ):
             if json_str:
                 self.regex_map = json.loads( json_str )
         # OAUTH CONFIG
-        if not self.oauth_data:
-            oauth_config_file = os.getenv( 'PYEXCH_OAUTH_CONFIG', self.oauth_config_file_default )
+        if not self.oauth_conf:
+            oauth_config_file = os.getenv( 'OAUTH_CONFIG_FILE', self.oauth_config_file_default )
             p = pathlib.Path( oauth_config_file )
-            self.oauth_data = yaml.safe_load( p.read_text() )
+            self.oauth_conf = yaml.safe_load( p.read_text() )
         # OAUTH TOKEN FILE
         if not self.token_file:
-            self.token_file = os.getenv( 'PYEXCH_TOKEN_FILE', self.token_file_default )
+            self.token_file = os.getenv( 'OAUTH_TOKEN_FILE', self.token_file_default )
 
 
     def _get_token( self ):
@@ -114,8 +119,12 @@ class PyExch( object ):
             with p.open() as f:
                 token = json.load( f )
             if self._is_token_expired( token ):
+                # exchangelib can't (or doesn't know how to) refresh an expired token
+                # so just force a new one from scratch
+                LOGR.info( 'token is expired, get a new auth code' )
                 token = self._new_token_from_auth_code()
         else:
+            LOGR.info( 'token file NOT FOUND, get a new auth code' )
             token = self._new_token_from_auth_code()
         LOGR.debug( f"Token:\n{token}" )
         return token
@@ -124,18 +133,20 @@ class PyExch( object ):
     def _new_token_from_auth_code( self ):
         base_url = ''.join((
             'https://login.microsoftonline.com/',
-            self.oauth_data['tenant_id'],
+            self.oauth_conf['tenant_id'],
             '/oauth2/v2.0',
             ))
         auth_url = f'{base_url}/authorize'
         token_url = f'{base_url}/token'
         redirect_url = 'https://login.microsoftonline.com/common/oauth2/nativeclient'
         oa2session = requests_oauthlib.OAuth2Session(
-            self.oauth_data['client_id'],
-            scope=self.oauth_data['scope'],
+            self.oauth_conf['client_id'],
+            scope=self.oauth_conf['scope'],
             redirect_uri=redirect_url
             )
         auth_uri, state = oa2session.authorization_url( auth_url )
+        # if not sys.stdin.isatty():
+        #     raise UserWarning( 'not a tty' )
         print( f"AUTH URI:\n{auth_uri}" )
         response = input( 'Paste AUTH URI HTTP response here:' )
         token = oa2session.fetch_token(
@@ -146,10 +157,12 @@ class PyExch( object ):
         p = pathlib.Path( self.token_file )
         with p.open( mode='w' ) as f:
             json.dump( token, f )
+        return token
 
 
     def _is_token_expired( self, token ):
         expiration = datetime.datetime.fromtimestamp( token['expires_at'] )
+        LOGR.debug( f'token expires at: {expiration}' )
         now = datetime.datetime.now()
         return now >= expiration
 
