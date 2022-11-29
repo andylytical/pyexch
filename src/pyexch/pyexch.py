@@ -33,7 +33,6 @@ class PyExch( object ):
         vacation, etc.) per day.
     '''
 
-    netrc_file_default = f"{os.environ['HOME']}/.ssh/netrc"
     oauth_config_file_default = f"{os.environ['HOME']}/.ssh/exchange_oauth.yaml"
     token_file_default = f"{os.environ['HOME']}/.ssh/exchange_token"
 
@@ -91,8 +90,8 @@ class PyExch( object ):
 
 
     def _try_load_from_env( self ):
-        # attempt to load from NETRC
-        netrc_file = os.getenv( 'NETRC', self.netrc_file_default )
+        # attempt to load NETRC
+        netrc_file = os.getenv( 'NETRC' )
         nrc = netrc.netrc( netrc_file )
         nrc_parts = nrc.authenticators( 'EXCH' )
         if nrc_parts:
@@ -332,6 +331,7 @@ class PyExch( object ):
             event.categories = categories
             update_recipients = exchangelib.items.SEND_ONLY_TO_ALL
         event.save( send_meeting_invitations=update_recipients )
+        return event
 
 
 if __name__ == '__main__':
