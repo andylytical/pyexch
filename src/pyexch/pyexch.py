@@ -309,5 +309,30 @@ class PyExch( object ):
         return self.new_event( **params )
 
 
+    def update_event( self, event, subject=None, attendees=None, location=None, categories=None ):
+        ''' Update an existing event.
+            Only the fields specified will be updated.
+            A parameter set to None will be excluded from updates.
+        '''
+        update_fields = []
+        update_recipients = exchangelib.items.SEND_ONLY_TO_CHANGED
+        if subject:
+            update_fields.append( 'subject' )
+            event.subject = subject
+            update_recipients = exchangelib.items.SEND_ONLY_TO_ALL
+        if attendees:
+            update_fields.append( 'required_attendees' )
+            event.required_attendees = attendees
+        if location:
+            update_fields.append( 'location' )
+            event.location = location
+            update_recipients = exchangelib.items.SEND_ONLY_TO_ALL
+        if categories:
+            update_fields.append( 'categories' )
+            event.categories = categories
+            update_recipients = exchangelib.items.SEND_ONLY_TO_ALL
+        event.save( send_meeting_invitations=update_recipients )
+
+
 if __name__ == '__main__':
     raise UserWarning( "Command line invocation unsupported" )
